@@ -30,6 +30,9 @@ public class InvisPlugin : BasePlugin, IPluginConfig<InvisConfig>
     
     // Track who is invis and timming
     public Dictionary<CCSPlayerController, SoundData> InvisiblePlayers = new();
+    
+    private CCSGameRules? _gameRules;
+    private bool _gameRulesInitialized;
 
     public override void Load(bool hotReload)
     {
@@ -37,6 +40,7 @@ public class InvisPlugin : BasePlugin, IPluginConfig<InvisConfig>
         // listerners from ingame events.
         RegisterListener<Listeners.CheckTransmit>(OnCheckTransmit);
         RegisterListener<Listeners.OnTick>(OnTick);
+        RegisterListener<Listeners.OnMapStart>(OnMapStartHandler);
         
         // player gets revealed if he did one of those.
         RegisterEventHandler<EventBombBeginplant>(OnPlayerStartPlant);
@@ -49,6 +53,11 @@ public class InvisPlugin : BasePlugin, IPluginConfig<InvisConfig>
         // admin commands.
         AddCommand("css_invisible", "Makes a player invisible", OnInvisibleCommand);
         AddCommand("css_invis", "Makes a player invisible", OnInvisibleCommand);
+
+        if (hotReload)
+        {
+            InitializeGameRules();
+        }
     }
 
     // cleanup when unloaded
@@ -80,10 +89,35 @@ public class InvisPlugin : BasePlugin, IPluginConfig<InvisConfig>
         Config = config;
     }
 
+    private void OnMapStartHandler(string mapName)
+    {
+        _gameRules = null;
+        _gameRulesInitialized = false;
+    }
+
+    private void InitializeGameRules()
+    {
+        if (_gameRulesInitialized) return;
+        
+        var gameRulesProxy = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").FirstOrDefault();
+        _gameRules = gameRulesProxy?.GameRules;
+        _gameRulesInitialized = _gameRules != null;
+    }
+
 
     // func gets called every tick for fade effects.
     public void OnTick()
     {
+        if (!_gameRulesInitialized)
+        {
+            InitializeGameRules();
+        }
+
+        if (_gameRules != null)
+        {
+            _gameRules.GameRestart = _gameRules.RestartRoundTime < Server.CurrentTime;
+        }
+
         float currentTime = Server.CurrentTime;
         var playersToRemove = new List<CCSPlayerController>();
         foreach (var (player, soundData) in InvisiblePlayers)
